@@ -66,7 +66,7 @@ static DWORD getWindowsProtectionFlags(unsigned Flags) {
     return PAGE_NOACCESS;
 }
 
-void* vallocate(size_t size, ProtectionFlag flag) {
+void* vallocate(size_t size, unsigned flag) {
     if (size == 0) return nullptr;
 
     DWORD allocFlag   = MEM_RESERVE | MEM_COMMIT;
@@ -83,7 +83,7 @@ unsigned vquery(void* address) {
     return info.Protect;
 }
 
-bool vprotect(void* address, size_t size, ProtectionFlag flag) {
+bool vprotect(void* address, size_t size, unsigned flag) {
     if (!address || size == 0) return false;
 
     DWORD protectFlag = getWindowsProtectionFlags(flag);

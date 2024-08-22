@@ -13,9 +13,10 @@ FuncPtr resolveSignature(std::string_view signature, std::span<std::byte> range)
 }
 
 void modify(void* ptr, size_t len, const std::function<void()>& callback) {
-    // VirtualProtect(ptr, len, PAGE_EXECUTE_READWRITE, &oldProtect);
+    auto oldProtect = vquery(ptr);
+    vprotect(ptr, len, MF_READ | MF_WRITE | MF_EXEC);
     callback();
-    // VirtualProtect(ptr, len, oldProtect, &oldProtect);
+    vprotect(ptr, len, oldProtect);
 }
 
 static int getPosixProtectionFlag(unsigned flags) {
@@ -49,7 +50,7 @@ static int getPosixProtectionFlag(unsigned flags) {
     return PROT_NONE;
 }
 
-void* vallocate(size_t size, ProtectionFlag flag) {
+void* vallocate(size_t size, unsigned flag) {
     if (size == 0) return nullptr;
 
     // On platforms that have it, we can use MAP_ANON to get a memory-mapped
@@ -135,7 +136,7 @@ unsigned vquery(void* address) {
     return 0;
 }
 
-bool vprotect(void* address, size_t size, ProtectionFlag flag) {
+bool vprotect(void* address, size_t size, unsigned flag) {
     if (address == nullptr || size == 0 || !flag) return false;
 
     int protectFlag = getPosixProtectionFlag(flag);

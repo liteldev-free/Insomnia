@@ -199,7 +199,7 @@ enum ProtectionFlag {
 };
 
 LLAPI void*    vallocate(size_t size, unsigned flag);
-LLAPI unsigned vquery(void* address, size_t size);
+LLAPI unsigned vquery(void* address);
 LLAPI bool     vprotect(void* address, size_t size, unsigned flag);
 LLAPI bool     vfree(void* address, size_t size);
 
