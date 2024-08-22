@@ -1,14 +1,10 @@
 #include "ll/api/memory/Memory.h"
 
-#include <optional>
 #include <vector>
 
 #include "pl/SymbolProvider.h"
 
 #include "ll/api/Logger.h"
-#include "ll/api/service/GamingStatus.h"
-#include "ll/api/thread/GlobalThreadPauser.h"
-#include "ll/api/utils/StringUtils.h"
 #include "ll/api/utils/SystemUtils.h"
 #include "ll/core/LeviLamina.h"
 
@@ -38,6 +34,7 @@ std::string demangleSymbol(std::string_view symbol) {
     }
     return res;
 }
+
 FuncPtr resolveSymbol(char const* symbol) {
     auto res = pl::symbol_provider::pl_resolve_symbol_silent(symbol);
     if (res == nullptr) {
@@ -46,6 +43,7 @@ FuncPtr resolveSymbol(char const* symbol) {
     }
     return res;
 }
+
 FuncPtr resolveSymbol(std::string_view symbol, bool disableErrorOutput) {
     auto res = pl::symbol_provider::pl_resolve_symbol_silent_n(symbol.data(), symbol.size());
     if (!disableErrorOutput && res == nullptr) {
@@ -54,6 +52,7 @@ FuncPtr resolveSymbol(std::string_view symbol, bool disableErrorOutput) {
     }
     return res;
 }
+
 FuncPtr resolveSignature(std::string_view signature) { return resolveSignature(signature, sys_utils::getImageRange()); }
 
 std::vector<std::string> lookupSymbol(FuncPtr func) {
@@ -66,7 +65,15 @@ std::vector<std::string> lookupSymbol(FuncPtr func) {
     if (result) pl::symbol_provider::pl_free_lookup_result(result);
     return symbols;
 }
+
 size_t getUsableSize(void* ptr) { return getDefaultAllocator().getUsableSize(ptr); }
+
+void* unwrapFuncAddress(void* ptr) noexcept {
+    if (*(char*)ptr == '\xE9') {
+        (uintptr_t&)(ptr) += *(int*)((uintptr_t)ptr + 1);
+    }
+    return ptr;
+}
 
 [[noreturn]] void throwMemoryException(size_t size) {
     if (size == std::numeric_limits<size_t>::max()) {
@@ -75,4 +82,5 @@ size_t getUsableSize(void* ptr) { return getDefaultAllocator().getUsableSize(ptr
         throw std::bad_alloc();
     }
 }
+
 } // namespace ll::memory

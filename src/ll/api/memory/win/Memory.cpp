@@ -29,12 +29,7 @@ FuncPtr resolveSignature(std::string_view signature, std::span<std::byte> range)
         return const_cast<std::byte*>(hat::find_pattern(range.begin(), range.end(), res.value()).get());
     }
 }
-void* unwrapFuncAddress(void* ptr) noexcept {
-    if (*(char*)ptr == '\xE9') {
-        (uintptr_t&)(ptr) += *(int*)((uintptr_t)ptr + 1);
-    }
-    return ptr;
-}
+
 void modify(void* ptr, size_t len, const std::function<void()>& callback) {
     std::unique_ptr<thread::GlobalThreadPauser> pauser;
     if (getGamingStatus() != GamingStatus::Default) {
@@ -45,26 +40,62 @@ void modify(void* ptr, size_t len, const std::function<void()>& callback) {
     callback();
     VirtualProtect(ptr, len, oldProtect, &oldProtect);
 }
-void VirtualMemory::alloc(size_t size, AccessMode mode) {
-    free();
-    memSize = size;
 
-    DWORD fProtect{PAGE_NOACCESS};
-    if ((bool)(mode & AccessMode::Read) && (bool)(mode & AccessMode::Write)) {
-        fProtect = PAGE_READWRITE;
-    } else if ((bool)(mode & AccessMode::Read)) {
-        fProtect = PAGE_READONLY;
-    } else if ((bool)(mode & AccessMode::Write)) {
-        fProtect = PAGE_WRITECOPY;
+static DWORD getWindowsProtectionFlags(unsigned Flags) {
+    switch (Flags & MF_RWE_MASK) {
+    // Contrary to what you might expect, the Windows page protection flags
+    // are not a bitwise combination of RWX values
+    case MF_READ:
+        return PAGE_READONLY;
+    case MF_WRITE:
+        // Note: PAGE_WRITE is not supported by VirtualProtect
+        return PAGE_READWRITE;
+    case MF_READ | MF_WRITE:
+        return PAGE_READWRITE;
+    case MF_READ | MF_EXEC:
+        return PAGE_EXECUTE_READ;
+    case MF_READ | MF_WRITE | MF_EXEC:
+        return PAGE_EXECUTE_READWRITE;
+    case MF_EXEC:
+        return PAGE_EXECUTE;
+    default:
+        // Illegal memory protection flag specified!
+        LL_UNREACHABLE;
     }
-    if ((bool)(mode & AccessMode::Execute)) fProtect *= PAGE_EXECUTE;
-
-    pointer = VirtualAlloc(nullptr, memSize, MEM_COMMIT | MEM_RESERVE, fProtect);
+    // Provide a default return value as required by some compilers.
+    return PAGE_NOACCESS;
 }
-void VirtualMemory::free() {
-    if (!pointer) return;
-    VirtualFree(pointer, 0, MEM_RELEASE);
-    pointer = nullptr;
+
+void* vallocate(size_t size, ProtectionFlag flag) {
+    if (size == 0) return nullptr;
+
+    DWORD allocFlag   = MEM_RESERVE | MEM_COMMIT;
+    DWORD protectFlag = getWindowsProtectionFlags(flag);
+
+    return ::VirtualAlloc(nullptr, size, allocFlag, protectFlag);
+}
+
+unsigned vquery(void* address) {
+    MEMORY_BASIC_INFORMATION info;
+    if (VirtualQuery(address, &info, sizeof(info)) == 0) {
+        return 0; // failed.
+    }
+    return info.Protect;
+}
+
+bool vprotect(void* address, size_t size, ProtectionFlag flag) {
+    if (!address || size == 0) return false;
+
+    DWORD protectFlag = getWindowsProtectionFlags(flag);
+    DWORD oldFlag;
+
+    return ::VirtualProtect(address, size, protectFlag, &oldFlag);
+}
+
+bool vfree(void* address, size_t size) {
+    if (!address || size == 0) return false;
+
+    return ::VirtualFree(address, 0, MEM_RELEASE);
 }
 
 } // namespace ll::memory

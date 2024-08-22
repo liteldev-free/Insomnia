@@ -178,51 +178,55 @@ template <template <class> class P, class T>
 }
 #endif
 
-enum class AccessMode {
-    Read    = 1 << 0,
-    Write   = 1 << 1,
-    Execute = 1 << 2,
-};
-
-[[nodiscard]] constexpr AccessMode operator|(const AccessMode l, const AccessMode r) noexcept {
-    return static_cast<AccessMode>(
-        static_cast<std::underlying_type_t<AccessMode>>(l) | static_cast<std::underlying_type_t<AccessMode>>(r)
-    );
-}
-[[nodiscard]] constexpr AccessMode operator&(const AccessMode l, const AccessMode r) noexcept {
-    return static_cast<AccessMode>(
-        static_cast<std::underlying_type_t<AccessMode>>(l) & static_cast<std::underlying_type_t<AccessMode>>(r)
-    );
-}
-class VirtualMemory {
-    void*  pointer{};
-    size_t memSize{};
-
-public:
-    LLAPI void alloc(size_t size, AccessMode mode);
-    LLAPI void free();
-
-    VirtualMemory() = default;
-
-    VirtualMemory(size_t size, AccessMode mode) { alloc(size, mode); }
-
-    ~VirtualMemory() { free(); }
-
-    size_t size() const { return memSize; }
-
-    void* get() const { return pointer; }
-
-    template <class T>
-    T* get() const {
-        return reinterpret_cast<T*>(pointer);
-    }
-};
-
 template <FixedString symbol>
 inline FuncPtr symbolCache = resolveSymbol(symbol, false);
 
 template <FixedString signature>
 inline FuncPtr signatureCache = resolveSignature(signature);
+
+/// The implementation of this part refers to llvm/support/memory.
+/// Large page allocation is not supported.
+
+/// TODO: Add exception handling instead of simply returning a boolean.
+
+enum ProtectionFlag {
+    MF_READ     = 0x1000000,
+    MF_WRITE    = 0x2000000,
+    MF_EXEC     = 0x4000000,
+    MF_RWE_MASK = 0x7000000,
+
+    // HUGE_HINT = 0x0000001
+};
+
+LLAPI void*    vallocate(size_t size, unsigned flag);
+LLAPI unsigned vquery(void* address, size_t size);
+LLAPI bool     vprotect(void* address, size_t size, unsigned flag);
+LLAPI bool     vfree(void* address, size_t size);
+
+/// MemoryBlock uses the RAII mechanism to automatically manage the allocation
+/// and release of virtual memory.
+class MemoryBlock {
+public:
+    MemoryBlock(size_t size, unsigned flag) : mPtr(vallocate(size, flag)) {
+        if (mPtr) mAllocatedSize = size;
+    }
+
+    ~MemoryBlock() {
+        if (mAllocatedSize) vfree(mPtr, mAllocatedSize);
+    }
+
+    [[nodiscard]] size_t size() const { return mAllocatedSize; }
+    [[nodiscard]] void*  get() const { return mPtr; }
+
+    template <class T>
+    T* get() const {
+        return reinterpret_cast<T*>(mPtr);
+    }
+
+private:
+    void*  mPtr{};
+    size_t mAllocatedSize{};
+};
 
 } // namespace ll::memory
 
