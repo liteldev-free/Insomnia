@@ -60,13 +60,13 @@ public:
         uintptr_t  data;
     } stored;
 
-    VirtualMemory closure{};
+    std::unique_ptr<MemoryBlock> closure;
 
     NativeClosure(origin_fn* func, uintptr_t data) : stored({func, data}) {
         detail::initNativeClosure(this, closureImpl, implOffset);
     }
 
-    closure_fn* get() const { return closure.get<closure_fn>(); }
+    closure_fn* get() const { return closure->get<closure_fn>(); }
 
     ~NativeClosure() { detail::releaseNativeClosure(this); }
 

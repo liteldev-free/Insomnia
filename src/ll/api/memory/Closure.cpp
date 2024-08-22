@@ -40,7 +40,7 @@ void initNativeClosure(void* self_, void* impl, size_t offset) {
     impl      = unwrapFuncAddress(impl);
     auto self = (T*)self_;
 
-    self->closure.alloc(size, AccessMode::Execute | AccessMode::Read);
+    self->closure = std::make_unique<MemoryBlock>(size, MF_READ | MF_EXEC);
 
     modify(self->closure.get(), size, [&]() {
         memcpy(self->closure.get(), impl, offset);
@@ -56,6 +56,6 @@ void initNativeClosure(void* self_, void* impl, size_t offset) {
 }
 void releaseNativeClosure(void* self_) {
     auto self = (T*)self_;
-    self->closure.free();
+    self->closure.reset();
 }
 } // namespace ll::memory::detail
